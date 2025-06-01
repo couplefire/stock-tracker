@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Availability Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-chart-line"></i> Stock Availability Tracker</h1>
+            <div class="tracker-status">
+                <span class="status-indicator" id="tracker-status"></span>
+                <span>Tracker: <span id="tracker-state">Loading...</span></span>
+            </div>
+        </header>
+
+        <main>
+            <!-- Items Section -->
+            <section class="card">
+                <div class="section-header">
+                    <h2><i class="fas fa-boxes"></i> Tracked Items</h2>
+                    <button class="btn btn-primary" onclick="showAddItemModal()">
+                        <i class="fas fa-plus"></i> Add Item
+                    </button>
+                </div>
+                
+                <div id="items-list" class="items-grid">
+                    <!-- Items will be loaded here -->
+                </div>
+            </section>
+
+            <!-- Email Notifications Section -->
+            <section class="card">
+                <div class="section-header">
+                    <h2><i class="fas fa-envelope"></i> Email Notifications</h2>
+                    <button class="btn btn-secondary" onclick="showAddEmailModal()">
+                        <i class="fas fa-plus"></i> Add Email
+                    </button>
+                </div>
+                
+                <div id="emails-list" class="emails-list">
+                    <!-- Emails will be loaded here -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Add/Edit Item Modal -->
+    <div id="item-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="item-modal-title">Add New Item</h3>
+                <span class="close" onclick="closeItemModal()">&times;</span>
+            </div>
+            <form id="item-form" onsubmit="saveItem(event)">
+                <div class="form-group">
+                    <label for="item-name">Item Name</label>
+                    <input type="text" id="item-name" name="name" required placeholder="e.g., PlayStation 5">
+                </div>
+                
+                <div class="form-group">
+                    <label for="item-url">Item URL</label>
+                    <input type="url" id="item-url" name="url" required placeholder="https://example.com/product">
+                </div>
+                
+                <div class="form-group">
+                    <label for="item-pattern">
+                        Pattern to Match
+                        <span class="tooltip">
+                            <i class="fas fa-info-circle"></i>
+                            <span class="tooltip-text">Regular expression pattern to search for in the page</span>
+                        </span>
+                    </label>
+                    <input type="text" id="item-pattern" name="rule_pattern" required 
+                           placeholder="e.g., out of stock|unavailable|sold out">
+                </div>
+                
+                <div class="form-group">
+                    <label for="item-count">
+                        Match Count for Out of Stock
+                        <span class="tooltip">
+                            <i class="fas fa-info-circle"></i>
+                            <span class="tooltip-text">If pattern matches this many times or more, item is considered out of stock</span>
+                        </span>
+                    </label>
+                    <input type="number" id="item-count" name="rule_count" min="1" required value="1">
+                </div>
+                
+                <input type="hidden" id="item-id">
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-cancel" onclick="closeItemModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Item</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Email Modal -->
+    <div id="email-modal" class="modal">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h3>Add Email Address</h3>
+                <span class="close" onclick="closeEmailModal()">&times;</span>
+            </div>
+            <form id="email-form" onsubmit="saveEmail(event)">
+                <div class="form-group">
+                    <label for="email-address">Email Address</label>
+                    <input type="email" id="email-address" name="email" required 
+                           placeholder="notification@example.com">
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-cancel" onclick="closeEmailModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Email</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html> 
