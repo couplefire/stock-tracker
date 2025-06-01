@@ -11,7 +11,7 @@ from app.email_notifier import EmailNotifier
 from scrapers.selenium_scraper import SeleniumScraper
 
 class StockTracker:
-    def __init__(self, check_interval: int = 10):
+    def __init__(self, check_interval: int = 30):
         self.db = Database()
         self.email_notifier = EmailNotifier()
         self.scraper = SeleniumScraper(headless=True)

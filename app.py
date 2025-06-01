@@ -9,7 +9,7 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 
 # Initialize database and tracker
 db = Database()
-tracker = StockTracker(check_interval=10)
+tracker = StockTracker(check_interval=30)
 
 @app.route('/')
 def index():
