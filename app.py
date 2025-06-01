@@ -3,13 +3,54 @@ from app.models import Database
 from app.stock_tracker import StockTracker
 import os
 from datetime import datetime
+import atexit
+import threading
+
+print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] app.py module loading, PID: {os.getpid()}")
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 
-# Initialize database and tracker
+# Initialize database
 db = Database()
-tracker = StockTracker(check_interval=30)
+
+# Global tracker instance - ensure only one is created
+_tracker_instance = None
+_tracker_lock = threading.Lock()
+
+def get_tracker():
+    """Get or create the single tracker instance"""
+    global _tracker_instance
+    with _tracker_lock:
+        if _tracker_instance is None:
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Creating tracker instance, PID: {os.getpid()}")
+            _tracker_instance = StockTracker(check_interval=30)
+    return _tracker_instance
+
+# Initialize tracker at module level if we're in the main process
+if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Initializing tracker in main process, PID: {os.getpid()}")
+    tracker = get_tracker()
+    tracker.start()
+else:
+    tracker = None
+
+# Register cleanup
+def cleanup_tracker():
+    if tracker and tracker.running:
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Cleaning up tracker, PID: {os.getpid()}")
+        tracker.stop()
+
+atexit.register(cleanup_tracker)
+
+def ensure_tracker():
+    """Ensure tracker is initialized and started"""
+    global tracker
+    if tracker is None:
+        tracker = get_tracker()
+        if not tracker.running:
+            tracker.start()
+    return tracker
 
 @app.route('/')
 def index():
@@ -48,7 +89,7 @@ def add_item():
         )
         
         # Force check the new item
-        tracker.force_check_item(item_id)
+        ensure_tracker().force_check_item(item_id)
         
         return jsonify({'id': item_id, 'message': 'Item added successfully'}), 201
     except Exception as e:
@@ -75,7 +116,7 @@ def update_item(item_id):
         )
         
         # Force check the updated item
-        tracker.force_check_item(item_id)
+        ensure_tracker().force_check_item(item_id)
         
         return jsonify({'message': 'Item updated successfully'}), 200
     except Exception as e:
@@ -93,7 +134,7 @@ def delete_item(item_id):
 @app.route('/api/items/<int:item_id>/check', methods=['POST'])
 def force_check_item(item_id):
     """Force check an item immediately"""
-    if tracker.force_check_item(item_id):
+    if ensure_tracker().force_check_item(item_id):
         return jsonify({'message': 'Check initiated'}), 200
     else:
         return jsonify({'error': 'Item not found'}), 404
@@ -135,18 +176,32 @@ def delete_email(email_id):
 @app.route('/api/tracker/status', methods=['GET'])
 def get_tracker_status():
     """Get tracker status"""
+    current_tracker = ensure_tracker()
     return jsonify({
-        'running': tracker.running,
-        'check_interval': tracker.check_interval
+        'running': current_tracker.running,
+        'check_interval': current_tracker.check_interval
     })
 
 if __name__ == '__main__':
-    # Start the tracker
-    tracker.start()
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Main block executing, PID: {os.getpid()}")
     
-    # Run the Flask app
-    try:
-        app.run(debug=True, host='0.0.0.0', port=5000)
-    finally:
-        # Stop the tracker when app exits
-        tracker.stop() 
+    # Get debug mode from environment variable
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    
+    # If debug mode, use the reloader properly
+    if debug_mode:
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Running in debug mode")
+        # Let Flask's reloader handle everything
+        app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=True)
+    else:
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Running in production mode")
+        # In production mode, manually start the tracker since there's no reloader
+        tracker = get_tracker()
+        if not tracker.running:
+            tracker.start()
+        
+        try:
+            app.run(debug=False, host='0.0.0.0', port=5000, use_reloader=False)
+        finally:
+            if tracker and tracker.running:
+                tracker.stop() 

@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Dict
 import sys
 import os
+import uuid
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.models import Database
@@ -19,6 +20,7 @@ class StockTracker:
         self.running = False
         self.thread = None
         self.item_locks = {}  # Prevent concurrent checks of same item
+        self.tracker_id = str(uuid.uuid4())[:8]  # Short ID for debugging
         
     def start(self):
         """Start the stock tracking thread"""
@@ -26,7 +28,7 @@ class StockTracker:
             self.running = True
             self.thread = threading.Thread(target=self._run_tracker, daemon=True)
             self.thread.start()
-            print(f"Stock tracker started. Checking every {self.check_interval} seconds.")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Stock tracker {self.tracker_id} started. Checking every {self.check_interval} seconds.")
     
     def stop(self):
         """Stop the stock tracking thread"""
@@ -73,7 +75,8 @@ class StockTracker:
         self.item_locks[item_id] = True
         
         try:
-            print(f"\nChecking item: {item['name']}")
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            print(f"\n[{timestamp}] Tracker {self.tracker_id} checking item: {item['name']}")
             
             # Check availability using Selenium
             is_available, error = self.scraper.check_availability(
