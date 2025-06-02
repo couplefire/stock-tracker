@@ -5,6 +5,9 @@ import os
 from datetime import datetime
 import atexit
 import threading
+from dotenv import load_dotenv
+
+load_dotenv()
 
 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] app.py module loading, PID: {os.getpid()}")
 
