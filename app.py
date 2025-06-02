@@ -24,7 +24,14 @@ def get_tracker():
     with _tracker_lock:
         if _tracker_instance is None:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Creating tracker instance, PID: {os.getpid()}")
-            _tracker_instance = StockTracker(check_interval=30)
+            # For low-resource environments (1 CPU, 1GB RAM), use only 1 concurrent check
+            # This prevents multiple browser instances from overwhelming the system
+            max_concurrent = int(os.environ.get('MAX_CONCURRENT_CHECKS', '1'))
+            check_interval = int(os.environ.get('CHECK_INTERVAL', '60'))  # Default to 60s for low resources
+            _tracker_instance = StockTracker(
+                check_interval=check_interval, 
+                max_concurrent_checks=max_concurrent
+            )
     return _tracker_instance
 
 # Initialize tracker at module level if we're in the main process
@@ -88,10 +95,18 @@ def add_item():
             rule_count=int(data['rule_count'])
         )
         
-        # Force check the new item
-        ensure_tracker().force_check_item(item_id)
+        # Queue the new item for checking (non-blocking)
+        try:
+            ensure_tracker().force_check_item(item_id)
+            check_status = 'queued'
+        except:
+            check_status = 'pending'
         
-        return jsonify({'id': item_id, 'message': 'Item added successfully'}), 201
+        return jsonify({
+            'id': item_id, 
+            'message': 'Item added successfully',
+            'check_status': check_status
+        }), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -115,10 +130,17 @@ def update_item(item_id):
             rule_count=int(data['rule_count'])
         )
         
-        # Force check the updated item
-        ensure_tracker().force_check_item(item_id)
+        # Queue the updated item for checking (non-blocking)
+        try:
+            ensure_tracker().force_check_item(item_id)
+            check_status = 'queued'
+        except:
+            check_status = 'pending'
         
-        return jsonify({'message': 'Item updated successfully'}), 200
+        return jsonify({
+            'message': 'Item updated successfully',
+            'check_status': check_status
+        }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -134,10 +156,18 @@ def delete_item(item_id):
 @app.route('/api/items/<int:item_id>/check', methods=['POST'])
 def force_check_item(item_id):
     """Force check an item immediately"""
-    if ensure_tracker().force_check_item(item_id):
-        return jsonify({'message': 'Check initiated'}), 200
-    else:
-        return jsonify({'error': 'Item not found'}), 404
+    try:
+        # Instead of waiting for the check to complete, just queue it
+        if ensure_tracker().force_check_item(item_id):
+            return jsonify({
+                'message': 'Check queued successfully',
+                'status': 'queued',
+                'note': 'The item will be checked shortly'
+            }), 202  # 202 Accepted - request accepted for processing
+        else:
+            return jsonify({'error': 'Item not found'}), 404
+    except Exception as e:
+        return jsonify({'error': f'Failed to queue check: {str(e)}'}), 500
 
 @app.route('/api/emails', methods=['GET'])
 def get_emails():
