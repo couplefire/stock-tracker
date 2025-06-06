@@ -149,24 +149,30 @@ class SeleniumScraper:
             driver.set_page_load_timeout(20)
             return driver
     
-    def check_availability(self, url: str, pattern: str, expected_count: int) -> Tuple[bool, Optional[str]]:
+    def check_availability(self, url: str, pattern: str, expected_count: int, return_page_source: bool = False) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Check if an item is available based on pattern matching.
-        Returns (is_available, error_message)
+        Returns (is_available, error_message, page_source)
         
         The rule works as follows:
         - If the number of pattern matches >= expected_count, the item is OUT OF STOCK
         - Otherwise, the item is AVAILABLE
+        
+        Args:
+            url: URL to check
+            pattern: Regex pattern to search for
+            expected_count: Number of matches that indicate out of stock
+            return_page_source: Whether to return the page source (for logging)
         """
         # Acquire semaphore to limit concurrent checks
         if not self.check_semaphore.acquire(timeout=60):
-            return False, "Check timeout - too many concurrent requests"
+            return False, "Check timeout - too many concurrent requests", None
         
         driver = None
         try:
             driver = self.get_driver(timeout=30)
             if not driver:
-                return False, "Could not acquire browser instance"
+                return False, "Could not acquire browser instance", None
             
             driver.get(url)
             
@@ -194,14 +200,14 @@ class SeleniumScraper:
             print(f"Expected count for out of stock: {expected_count}")
             print(f"Is available: {is_available}")
             
-            return is_available, None
+            return is_available, None, page_source if return_page_source else None
             
         except TimeoutException:
-            return False, "Page load timeout"
+            return False, "Page load timeout", None
         except WebDriverException as e:
-            return False, f"WebDriver error: {str(e)}"
+            return False, f"WebDriver error: {str(e)}", None
         except Exception as e:
-            return False, f"Unexpected error: {str(e)}"
+            return False, f"Unexpected error: {str(e)}", None
         finally:
             self.check_semaphore.release()
             if driver:

@@ -12,6 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.models import Database
 from app.email_notifier import EmailNotifier
+from app.page_source_logger import PageSourceLogger
 from scrapers.selenium_scraper import SeleniumScraper
 
 @dataclass(order=True)
@@ -24,6 +25,7 @@ class StockTracker:
     def __init__(self, check_interval: int = 30, max_concurrent_checks: int = 1):
         self.db = Database()
         self.email_notifier = EmailNotifier()
+        self.page_logger = PageSourceLogger()
         # Use singleton scraper with limited workers
         self.scraper = SeleniumScraper(headless=True, max_workers=max_concurrent_checks)
         self.check_interval = check_interval
@@ -42,6 +44,9 @@ class StockTracker:
         if not self.running:
             self.running = True
             
+            # Start page source logger cleanup thread
+            self.page_logger.start_cleanup_thread()
+            
             # Start worker threads
             for i in range(self.max_concurrent_checks):
                 worker = threading.Thread(target=self._worker, daemon=True, name=f"Worker-{i}")
@@ -57,6 +62,9 @@ class StockTracker:
     def stop(self):
         """Stop the stock tracking thread and workers"""
         self.running = False
+        
+        # Stop page source logger cleanup thread
+        self.page_logger.stop_cleanup_thread()
         
         # Add poison pills for workers
         for _ in range(self.max_concurrent_checks):
@@ -136,26 +144,47 @@ class StockTracker:
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             print(f"\n[{timestamp}] Tracker {self.tracker_id} checking item: {item['name']}")
             
-            # Check availability using Selenium
-            is_available, error = self.scraper.check_availability(
+            # Get previous availability
+            previous_availability = item['is_available']
+            
+            # First check without page source to determine if availability changed
+            is_available, error, _ = self.scraper.check_availability(
                 item['url'],
                 item['rule_pattern'],
-                item['rule_count']
+                item['rule_count'],
+                return_page_source=False
             )
             
             if error:
                 print(f"Error checking {item['name']}: {error}")
                 return
             
-            # Get previous availability
-            previous_availability = item['is_available']
-            
-            # Update in database
-            self.db.update_item_availability(item_id, is_available)
-            
             # Check if availability changed
-            if previous_availability is not None and previous_availability != is_available:
+            availability_changed = (previous_availability is not None and previous_availability != is_available)
+            
+            # If availability changed, get page source for logging
+            page_source = None
+            if availability_changed:
                 print(f"Availability changed for {item['name']}: {'Available' if is_available else 'Out of Stock'}")
+                
+                # Get page source for logging
+                _, _, page_source = self.scraper.check_availability(
+                    item['url'],
+                    item['rule_pattern'],
+                    item['rule_count'],
+                    return_page_source=True
+                )
+                
+                # Log page source
+                if page_source:
+                    self.page_logger.log_page_source(
+                        item_name=item['name'],
+                        item_id=item_id,
+                        url=item['url'],
+                        page_source=page_source,
+                        is_available=is_available,
+                        previous_availability=previous_availability
+                    )
                 
                 # Get email recipients
                 recipients = self.db.get_active_email_addresses()
@@ -168,6 +197,9 @@ class StockTracker:
                         item['url'],
                         is_available
                     )
+            
+            # Update in database
+            self.db.update_item_availability(item_id, is_available)
             
         except Exception as e:
             print(f"Error checking item {item['name']}: {str(e)}")
